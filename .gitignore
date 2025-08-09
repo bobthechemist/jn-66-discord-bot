@@ -17,6 +17,9 @@ gcredentials.json
 *.db
 *.sqlite3
 
+# Log Files
+*.log
+
 # Configuration file that contains secrets
 bot_config.json
 
