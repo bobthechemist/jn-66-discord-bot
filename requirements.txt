@@ -1,0 +1,7 @@
+discord.py
+python-dotenv
+google-api-python-client
+google-auth-oauthlib
+ollama
+pydantic
+parsedatetime

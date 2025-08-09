@@ -1,0 +1,11 @@
+{
+  "ollama_model": "gemma2:2b",
+  "db_filename": "jn-66.db",
+  "bot_prefix": "!",
+  "log_location": "<absolute-path-to>/jn-66.log",
+  "username": "You",
+  "botname": "JN-66"
+  "calendars_to_check": [
+    { "summary": "your_email@example.com", "description": "A description for this calendar" }
+  ]
+}
