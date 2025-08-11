@@ -1,0 +1,24 @@
+# Ignore the git directory itself
+.git
+.gitignore
+.dockerignore
+
+# Ignore Python virtual environment
+venv
+
+# Ignore local config and secrets
+.env
+gtoken.json
+gcredentials.json
+bot_config.json
+
+# Ignore database and log files
+*.db
+*.sqlite3
+*.log
+
+# Ignore IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+__pycache__/

@@ -1,0 +1,11 @@
+[Unit]
+Description=Intelligent Task Management Bot (JN-66)
+After=network.target
+
+[Service]
+User=bob
+WorkingDirectory=/home/bob/jn-66
+ExecStart=/home/bob/venv/jn-66/bin/python /home/bob/jn-66/jn-66.py
+
+[Install]
+WantedBy=multi-user.target

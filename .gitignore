@@ -23,5 +23,8 @@ gcredentials.json
 # Configuration file that contains secrets
 bot_config.json
 
+# Deb packages used by docker
+*.deb
+
 # Where BoB keeps files that should not be stored in the respository
 appendix/
