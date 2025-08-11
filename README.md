@@ -36,9 +36,11 @@ Follow these steps to get your JN-66 instance running.
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-username/jn-66.git
-cd jn-66
+git clone https://github.com/your-username/jn-66-discord-bot.git
+cd jn-66-discord-bot
 ```
+
+*Note:* I rename the directory to `jn-66` on my RPi, so you may see that crop up in some of the docs here.
 
 ### 2. Install Dependencies
 It is highly recommended to use a Python virtual environment.
@@ -47,6 +49,8 @@ python -m venv venv
 source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
 pip install -r requirements.txt
 ```
+
+*Note:* I actually create a separate folder of virtual environments (e.g. ~/venv/jn-66) which does a couple of things. First, if I have my code on a shared cloud service such as one drive, the virtual environment isn't shared across multiple computers, resulting in havoc. Second, I can have fewer virtual environments floating around my computer, which is helpful when projects use a similar set of libraries or I start a side project that will eventually be integrated into a larger one.
 
 ### 3. Configure Google API Credentials
 This is the most complex step.
@@ -115,7 +119,7 @@ Description=Intelligent Task Management Bot (JN-66)
 After=network.target
 
 [Service]
-User=bob
+User=pi # replace with your RPi user name
 WorkingDirectory=<path-to-project-directory>
 ExecStart=<absolute-path-to-venv-python> <path-to-project-directory>/jn-66.py
 
