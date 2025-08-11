@@ -3,93 +3,213 @@ import discord
 from discord.ext import commands
 import ollama
 import logging
+import asyncio
+import re
+import requests
+import base64
+import io
+from datetime import datetime, date, time, timezone
+
 from utils.discord_helpers import send_long_message
 from utils.ui_helpers import create_embed, ConfirmationView, EmbedColors
-from utils.database_manager import DatabaseManager 
-import asyncio
-from datetime import datetime, date, time, timezone
-from utils.task_agent import Agent as TaskAgent # Use an alias to avoid name confusion
+from utils.database_manager import DatabaseManager
+from utils.task_agent import Agent as TaskAgent
 from utils.ui_helpers import TaskView
 from utils.scheduler import Job
-
-
-# --- CONFIGURATION ---
-#OLLAMA_MODEL = 'qwen2.5-coder:1.5b'
-SYSTEM_PROMPT = f"You are a helpful assistant."
-#DATABASE = 'btcbot_test.db'
-
-# ^^^ We might want configuration information to go into btcbot.py
 
 log = logging.getLogger(__name__)
 
 class LLMCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        # --- NEW: Configuration for the agent ---
+        # These will be loaded from bot_config.json via the main bot script
+        self.conversation_model = getattr(self.bot, 'conversation_model', 'gemma2:2b')
+        self.coder_model = getattr(self.bot, 'coder_model', 'qwen2.5-coder:1.5b')
+        self.sandbox_url = getattr(self.bot, 'sandbox_url', 'http://localhost:5000/execute')
+        
         # Each cog instance will have its own conversation history
         self.conversation_history = []
         self._initialize_history()
-        # As the administrative cog, we control the database
+        
         self.db = DatabaseManager(bot.db_filename)
+        self.setup_scheduled_jobs()
 
-        # Schedule tasks to run every day at 6:30 AM
+    def _initialize_history(self):
+        """Clears the history and adds the initial system prompt for the agent."""
+        self.conversation_history.clear()
+        
+        # --- NEW: Agentic System Prompt ---
+        # This prompt teaches the LLM how to use its new code execution tool.
+        system_prompt = f"""
+        You are {self.bot.botname}, a helpful assistant speaking with {self.bot.username}.
+        You have access to a tool that can execute Python code in a secure sandbox.
+
+        When you need to perform a calculation, generate a plot, or access information via code, you MUST respond with the special tag [TOOL_USE] followed by a clear, one-sentence prompt for a specialist code generation model.
+
+        Example 1:
+        User: What is the square root of 256?
+        You: To answer that, I will calculate the square root of 256. [TOOL_USE] Generate Python code to calculate and print the square root of 256.
+
+        Example 2:
+        User: Plot the sine and cosine functions on the same graph.
+        You: I will generate a plot of both functions. [TOOL_USE] Generate Python code to plot sin(x) and cos(x) from -2*pi to 2*pi on the same graph, with a legend.
+
+        Do not write the code yourself. Only provide the [TOOL_USE] tag and the prompt for the coder model. If the user is just chatting, respond normally without using the tool.
+        """
+        self.conversation_history.append({'role': 'system', 'content': system_prompt})
+        log.info("LLM conversation history initialized with agentic prompt.")
+
+    def setup_scheduled_jobs(self):
+        """Initializes and adds all scheduled jobs for this cog."""
         task_job = Job(
             callback=self.scheduled_tasks_task,
             target_id=self.bot.authorized_user_id,
             target_type='dm',
-            target_time=time(10, 30, tzinfo=timezone.utc), # No target_time means it starts right away +4 for the moment
-            hours=24 # can also be minutes
+            target_time=time(10, 30, tzinfo=timezone.utc),
+            hours=24
         )
         self.bot.scheduler.add_job(task_job)
 
-    def _initialize_history(self):
-        """Clears the history and adds the initial system prompt."""
-        self.conversation_history.clear()
-        self.conversation_history.append({'role': 'system', 'content': SYSTEM_PROMPT + f"The name of the User you are speaking with is {self.bot.username}."})
-        log.info("LLM conversation history initialized.")
+    # --- NEW: Helper method to extract code ---
+    def _extract_python_code(self, text: str) -> str:
+        """Extracts Python code from markdown code blocks."""
+        match = re.search(r'```python\s*([\s\S]+?)\s*```', text)
+        if match: return match.group(1).strip()
+        match = re.search(r'```\s*([\s\S]+?)\s*```', text)
+        if match: return match.group(1).strip()
+        # As a fallback, if no markdown is present, assume the whole response is code.
+        return text.strip()
 
-
+    # --- NEW: Helper method to run code in the sandbox ---
+    async def _execute_code_in_sandbox(self, code_string: str):
+        """Sends code to the Docker sandbox and returns the result."""
+        log.info("Executing code in sandbox...")
+        try:
+            # requests is a blocking library, so we run it in a separate thread
+            # to avoid freezing the entire bot.
+            response = await asyncio.to_thread(
+                requests.post,
+                self.sandbox_url,
+                json={"code": code_string},
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            log.error(f"API Error connecting to sandbox: {e}")
+            return {"stdout": "", "stderr": f"API Error: Could not connect to the sandbox.\n{e}", "image_b64": None}
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        """The listener for messages, specific to this cog's functionality."""
-        # Standard checks: ignore bots, non-DMs, and unauthorized users
-        # We access the authorized ID from the bot instance now
+        """The listener for messages, now with agentic tool-use logic."""
         if (message.author.bot or
             not isinstance(message.channel, discord.DMChannel) or
-            message.author.id != self.bot.authorized_user_id):
+            message.author.id != self.bot.authorized_user_id or
+            message.content.startswith(self.bot.command_prefix)):
             return
 
+        thinking_message = await message.channel.send("🤔 Thinking...")
         
-        # If the message is a command, the bot's core will handle it.
-        # We only care about messages that are NOT commands.
-        if message.content.startswith(self.bot.command_prefix):
-            return
-
-        # --- LLM Logic ---
         try:
+            # Add user message to history and DB
             self.conversation_history.append({'role': 'user', 'content': message.content})
-            # Let's sore the conversation in the database as well.
-            self.db.store_message({'author':self.bot.username, 'timestamp':datetime.now().isoformat(), 'message': message.content})
-            thinking_message = await message.channel.send("🤔 Thinking...")
-            response = await asyncio.to_thread(
-                ollama.chat,
-                model=self.bot.model,
-                messages=self.conversation_history
-            )
-            response_content = response['message']['content']
-            # Store the bot's response in the database.
-            self.db.store_message({'author':self.bot.botname, 'timestamp':datetime.now().isoformat(), 'message': response_content})
-            self.conversation_history.append({'role': 'assistant', 'content': response_content})
-            if len(response_content) <= 2000:
-                await thinking_message.edit(content=response_content)
-            else:
-                await thinking_message.delete()
-                await send_long_message(message.channel, response_content)
-        except Exception as e:
-            error_message = f"Sorry, an error occurred with the LLM: {e}"
-            log.error(error_message)
-            await message.channel.send(error_message)
+            self.db.store_message({'author': self.bot.username, 'timestamp': datetime.now().isoformat(), 'message': message.content})
 
+            # === REASONING STEP ===
+            # Ask the conversational LLM what to do.
+            response = await asyncio.to_thread(
+                ollama.chat, model=self.conversation_model, messages=self.conversation_history
+            )
+            assistant_response = response['message']['content']
+
+            # === DECISION STEP: Check for tool use ===
+            if "[TOOL_USE]" not in assistant_response:
+                # No tool needed, just a normal chat response
+                self.conversation_history.append({'role': 'assistant', 'content': assistant_response})
+                self.db.store_message({'author': self.bot.botname, 'timestamp': datetime.now().isoformat(), 'message': assistant_response})
+                await thinking_message.edit(content=assistant_response)
+                return
+
+            # === TOOL USE PATH ===
+            log.info("LLM decided to use the code execution tool.")
+            await thinking_message.edit(content="✅ Decision: Use Code Execution Tool. Generating code...")
+            
+            # 1. Generate Code
+            code_prompt = assistant_response.split("[TOOL_USE]")[-1].strip()
+            coder_response = await asyncio.to_thread(
+                ollama.chat,
+                model=self.coder_model,
+                messages=[{'role': 'user', 'content': f'Generate only the Python code for this prompt, without any explanation: {code_prompt}'}]
+            )
+            generated_code = self._extract_python_code(coder_response['message']['content'])
+            
+            # 2. Execute Code (with error-correction loop)
+            max_retries = 2
+            for i in range(max_retries):
+                await thinking_message.edit(content=f"⚙️ Attempt {i+1}: Executing generated code...")
+                execution_result = await self._execute_code_in_sandbox(generated_code)
+
+                if not execution_result['stderr']:
+                    log.info("Code executed successfully.")
+                    break  # Success!
+
+                log.warning(f"Code execution failed. Stderr: {execution_result['stderr']}")
+                if i < max_retries - 1:
+                    await thinking_message.edit(content=f"⚠️ Code failed. Attempting to fix (Attempt {i+2})...")
+                    correction_prompt = f"The following Python code failed with an error. Please fix it and provide only the complete, corrected script.\n\nCODE:\n{generated_code}\n\nERROR:\n{execution_result['stderr']}"
+                    coder_response = await asyncio.to_thread(
+                        ollama.chat, model=self.coder_model, messages=[{'role': 'user', 'content': correction_prompt}]
+                    )
+                    generated_code = self._extract_python_code(coder_response['message']['content'])
+                else:
+                    log.error("Max retries reached. Could not fix the code.")
+            
+            # 3. Summarize Result
+            await thinking_message.edit(content="📝 Summarizing results...")
+            tool_output = f"[TOOL_RESULT]\nSTDOUT:\n{execution_result['stdout']}\nSTDERR:\n{execution_result['stderr']}"
+            
+            # Update history for the final summary
+            self.conversation_history.append({'role': 'assistant', 'content': assistant_response})
+            self.conversation_history.append({'role': 'tool', 'content': tool_output})
+            
+            summarizer_prompt = f"""A user has prompted you with a question and you used a tool to answer it. The tool returns textual answers in STDOUT
+                and any errors in STDERR. Based on the tool's output, provide a concise, natural language answer to my original question.\n
+                [ORIGINAL_QUESTION]{message.content}
+                {tool_output}"
+                """
+            #self.conversation_history.append({'role': 'user', 'content': summarizer_prompt})
+            
+            final_response = await asyncio.to_thread(
+                ollama.chat, model=self.conversation_model, messages=[{'role':'user', 'content':summarizer_prompt}]
+            )
+            final_message = final_response['message']['content']
+            
+            # 4. Send Final Response to Discord
+            self.conversation_history.append({'role': 'assistant', 'content': final_message})
+            self.db.store_message({'author': self.bot.botname, 'timestamp': datetime.now().isoformat(), 'message': f"[Agent Output]\n{final_message}"})
+
+            # Prepare file if an image was created
+            discord_file = None
+            if execution_result.get('image_b64'):
+                log.info("Image data found in sandbox response.")
+                image_data = base64.b64decode(execution_result['image_b64'])
+                image_buffer = io.BytesIO(image_data)
+                discord_file = discord.File(image_buffer, filename="result.png")
+
+            if discord_file:
+                await thinking_message.edit(content=final_message, attachments=[discord_file])
+            else:
+                await thinking_message.edit(content=final_message)
+
+        except Exception as e:
+            error_message = f"Sorry, a critical error occurred in the agentic loop: {e}"
+            log.error(error_message, exc_info=True)
+            await thinking_message.edit(content=error_message)
+
+
+    # --- ALL OTHER COMMANDS (!history, !m, !t, !tasks) remain unchanged ---
+    # [ ... The rest of your existing commands go here ... ]
     @commands.command()
     @commands.dm_only()
     async def history(self, ctx: commands.Context):
@@ -242,6 +362,5 @@ class LLMCog(commands.Cog):
             log.error(f"Error in scheduled 'tasks' job: {e}", exc_info=True)
             await target.send(embed=create_embed("Error", "Sorry, an error occurred while fetching your daily tasks.", EmbedColors.ERROR))
 
-# This async function is required for the cog to be loaded.
 async def setup(bot: commands.Bot):
     await bot.add_cog(LLMCog(bot))

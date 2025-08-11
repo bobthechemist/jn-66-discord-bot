@@ -137,7 +137,13 @@ def run_agentic_loop(user_prompt, conversation_history):
         conversation_history.append({'role': 'tool', 'content': tool_output})
         
         print_colored("\n[Summarizing result...]", Colors.BLUE)
-        final_response = ollama.chat(model=CONVERSATION_MODEL, messages=conversation_history, stream=False)
+        summarizer_prompt = f"""A user has prompted you with a question and you used a tool to answer it. The tool returns textual answers in STDOUT
+        and any errors in STDERR. Based on the tool's output, provide a concise, natural language answer to my original question.\n
+        [ORIGINAL_QUESTION]{user_prompt}
+        {tool_output}"
+        """
+        conversation_history.append({'role': 'assistant', 'content': summarizer_prompt})
+        final_response = ollama.chat(model=CONVERSATION_MODEL, messages=[{'role':'system', 'content':summarizer_prompt}], stream=False)
         final_message = final_response['message']['content']
         conversation_history.append({'role': 'assistant', 'content': final_message})
         
