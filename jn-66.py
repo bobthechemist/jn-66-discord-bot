@@ -69,7 +69,7 @@ class JN66Bot(commands.Bot):
         self.username = config.get('username','a user with no name')
         self.botname = config.get('botname', 'a bot with no name')
         self.db_filename = config.get('db_filename', 'bot.db')
-        #self.model = config.get('ollama_model','gemma2:2b')
+        self.model = config.get('ollama_model','gemma2:2b') # Still needed for some cogs, should be fixed
         self.conversation_model = config.get('conversation_model', 'gemma2:2b')
         self.coder_model = config.get('coder_model', 'qwen2.5-coder:1.5b')
         self.sandbox_url = config.get('sandbox_url', 'http://localhost:5000/execute')
