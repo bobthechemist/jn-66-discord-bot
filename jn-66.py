@@ -73,6 +73,7 @@ class JN66Bot(commands.Bot):
         self.conversation_model = config.get('conversation_model', 'gemma2:2b')
         self.coder_model = config.get('coder_model', 'qwen2.5-coder:1.5b')
         self.sandbox_url = config.get('sandbox_url', 'http://localhost:5000/execute')
+        self.local_timezone = config.get('local_timezone', 'America/New_York')
         self.calendars = config.get('calendars_to_check', [])
         self.scheduler = Scheduler(self)
 

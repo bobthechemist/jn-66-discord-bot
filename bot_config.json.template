@@ -6,6 +6,7 @@
   "conversation_model": "gemma2:2b",
   "coder_model": "qwen2.5-coder:1.5b",
   "sandbox_url": "http://localhost:5000/execute",
+  "local_timezone": "America/New_York",
   "username": "You",
   "botname": "JN-66"
   "calendars_to_check": [
