@@ -17,7 +17,7 @@ class EmbedColors:
     INFO = 0x2196F3     # Blue
     WARNING = 0xFFC107   # Amber
 
-def create_embed(title: str, description: str = "", color: int = EmbedColors.INFO) -> discord.Embed:
+def create_embed(title: str, description: str = "", color: int = EmbedColors.INFO, footer_text: str = None) -> discord.Embed:
     """
     Creates a standardized Discord embed.
     Args:
@@ -28,9 +28,15 @@ def create_embed(title: str, description: str = "", color: int = EmbedColors.INF
         A discord.Embed object ready to be sent.
     """
     embed = discord.Embed(title=title, description=description, color=color)
-    # You could add a standard footer to all embeds here, for example:
-    #embed.set_footer(text="Brought to you by BTc bot")
+    
+    if footer_text:
+        embed.set_footer(text=footer_text)
+    else:
+        # You can still have a default footer if you want
+        embed.set_footer(text="")
+        
     return embed
+
 
 class ConfirmationView(discord.ui.View):
     """
@@ -90,6 +96,7 @@ class TaskButton(discord.ui.Button):
             db_manager: An instance of the DatabaseManager to perform the update.
         """
         label_text = task['description'].upper() if task.get('is_overdue', False) else task['description']
+        label_text = f"({task['task_id']}) " + label_text
         # Discord button labels have an 80-character limit.
         super().__init__(label=label_text[:80], style=discord.ButtonStyle.primary, custom_id=f"task_{task['task_id']}")
         self.task_id = task['task_id']
