@@ -60,16 +60,17 @@ class DatabaseManager:
         sql = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
         self.cursor.execute(sql, tuple(record.values()))
         self.conn.commit()
+        return self.cursor.lastrowid
     
     def store_message(self, message):
-        self.store("messages", message)
+        return self.store("messages", message)
 
     def store_task(self, task):
-        self.store('tasks', task)
+        return self.store('tasks', task)
 
     def store_musing(self, message):
         log.debug(message)
-        self.store("musings", message)
+        return self.store("musings", message)
         
     def fetch(self, table, criteria=None):
         """

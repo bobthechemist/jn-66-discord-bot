@@ -259,36 +259,34 @@ class LLMCog(commands.Cog):
         Uses an LLM to parse a message into a structured task and stores it.
         """
         try:
-            # 1. Acknowledge the request and instantiate the agent.
-            processing_embed = create_embed("Processing Task...", "Your request is being analyzed by the AI. Please wait.", EmbedColors.INFO)
+            processing_embed = create_embed("Processing Task...", "Your request is being analyzed. Please wait.", EmbedColors.INFO)
             response_message = await ctx.send(embed=processing_embed)
             
+            # --- The task_agent now uses the improved version ---
             task_agent = TaskAgent(model_name=self.bot.model)
-
-            # 2. Run the blocking LLM call in a separate thread.
-            # This prevents the bot from freezing while waiting for the AI.
             task_data = await asyncio.to_thread(task_agent.process_task, message)
             
-            # 3. Add bot-managed metadata to the task dictionary.
             task_data['creation_date'] = datetime.now().isoformat()
-            task_data['status'] = 'pending' # All new tasks are pending
-            task_data['notes'] = f"Original prompt: '{message}'" # Store the original text for context
+            task_data['status'] = 'pending'
+            task_data['notes'] = f"Original prompt: '{message}'"
 
-            # 4. Store the structured task in the database.
-            self.db.store_task(task_data)
-            log.info(f"Task stored successfully: {task_data['description']}")
+            # --- MODIFIED: Store the task and get its ID back ---
+            task_id = self.db.store_task(task_data)
+            log.info(f"Task stored successfully (ID: {task_id}): {task_data['description']}")
 
-            # 5. Create a confirmation embed to show the user what was stored.
+            # --- MODIFIED: Create a confirmation embed that includes the Task ID ---
             confirm_embed = create_embed(
-                title=f"✅ Task Stored: {task_data['description']}",
+                # Title now includes the task ID
+                title=f"✅ Task Stored (ID: {task_id})",
                 description=(
+                    f"**Description:** {task_data['description']}\n"
                     f"**Priority:** {task_data['priority']}\n"
                     f"**Due Date:** {task_data['due_date']}"
                 ),
-                color=EmbedColors.SUCCESS
+                color=EmbedColors.SUCCESS,
+
             )
 
-            # 6. Edit the original "Processing..." message with the final result.
             await response_message.edit(embed=confirm_embed)
 
         except Exception as e:
@@ -298,11 +296,70 @@ class LLMCog(commands.Cog):
                 f"An unexpected error occurred: {e}\n\nPlease try again.",
                 EmbedColors.ERROR
             )
-            # Try to edit the original message, or send a new one if that fails
             if 'response_message' in locals():
                 await response_message.edit(embed=error_embed)
             else:
                 await ctx.send(embed=error_embed)
+
+    @commands.command(name="edit")
+    @commands.dm_only()
+    async def edit_task(self, ctx: commands.Context, task_id: int, *, new_description: str):
+        """
+        Edits the description of an existing task.
+        Usage: !edit <task_id> <new_description>
+        """
+        try:
+            # Check if the task exists first
+            existing_task = self.db.fetch_tasks(criteria={'task_id': task_id})
+            if not existing_task:
+                embed = create_embed("Error", f"No task found with ID `{task_id}`.", EmbedColors.ERROR)
+                await ctx.send(embed=embed)
+                return
+
+            # Update the task in the database
+            updates = {'description': new_description}
+            self.db.update_task(task_id, updates)
+            log.info(f"Task {task_id} description updated to: '{new_description}'")
+
+            # Send a confirmation message
+            embed = create_embed(
+                "Task Updated",
+                f"Successfully updated the description for Task ID `{task_id}`.",
+                EmbedColors.SUCCESS
+            )
+            await ctx.send(embed=embed)
+
+        except ValueError:
+            await ctx.send("Invalid Task ID. Please provide a number.")
+        except Exception as e:
+            log.error(f"Error in !edit command: {e}", exc_info=True)
+            error_embed = create_embed("Error", f"An unexpected error occurred: {e}", EmbedColors.ERROR)
+            await ctx.send(embed=error_embed)
+            
+    @commands.command(name="delete")
+    @commands.dm_only()
+    async def delete_task(self, ctx: commands.Context, task_id: int):
+        """
+        Deletes a task after asking for confirmation
+        """
+        view = ConfirmationView(author=ctx.author, confirm_label="Delete task", cancel_label="Keep task")
+        embed = create_embed(
+            title="Confirm task deletion",
+            description="Are you sure you want to delete this task?",
+            color=EmbedColors.WARNING
+        )
+        view.message = await ctx.send(embed=embed, view=view)
+        await view.wait()
+
+        if view.value is True:
+            self.db.delete_task(task_id=task_id)
+            final_embed = create_embed("Success", "Task has been removed.", EmbedColors.SUCCESS)
+        elif view.value is False:
+            final_embed = create_embed("Cancelled", "Not deleting the task", EmbedColors.INFO)
+        else:
+            final_embed = create_embed("Timed Out", "You did not respond in time.", EmbedColors.ERROR)
+
+        await view.message.edit(embed=final_embed, view=None)
 
     async def _build_tasks_response(self) -> tuple[discord.Embed, discord.ui.View | None]:
         """
