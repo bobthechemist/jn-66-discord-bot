@@ -419,5 +419,111 @@ class LLMCog(commands.Cog):
             log.error(f"Error in scheduled 'tasks' job: {e}", exc_info=True)
             await target.send(embed=create_embed("Error", "Sorry, an error occurred while fetching your daily tasks.", EmbedColors.ERROR))
 
+    @commands.command(name="view")
+    @commands.dm_only()
+    async def view_task(self, ctx: commands.Context, task_id: int):
+        """Displays all details for a specific task."""
+        try:
+            task = self.db.fetch_tasks(criteria={'task_id': task_id})
+            if not task:
+                embed = create_embed("Error", f"No task found with ID `{task_id}`.", EmbedColors.ERROR)
+                await ctx.send(embed=embed)
+                return
+
+            task_details = task[0] # fetch_tasks returns a list
+            
+            # Safely format the creation date
+            creation_date_str = task_details.get('creation_date', 'N/A')
+            if 'T' in creation_date_str:
+                creation_date_str = creation_date_str.split('T')[0]
+
+            description = (
+                f"**Description:** {task_details.get('description', 'N/A')}\n"
+                f"**Status:** {task_details.get('status', 'N/A').capitalize()}\n"
+                f"**Priority:** {task_details.get('priority', 'N/A')}\n"
+                f"**Due Date:** {task_details.get('due_date', 'N/A')}\n"
+                f"**Created On:** {creation_date_str}\n"
+                f"**Completed On:** {task_details.get('date_completed') or 'Not completed'}\n"
+                f"**Notes:** {task_details.get('notes') or 'None'}\n"
+            )
+
+            embed = create_embed(
+                title=f"📋 Task Details (ID: {task_id})",
+                description=description,
+                color=EmbedColors.INFO
+            )
+            await ctx.send(embed=embed)
+
+        except ValueError:
+            await ctx.send("Invalid Task ID. Please provide a number.")
+        except Exception as e:
+            log.error(f"Error in !view command: {e}", exc_info=True)
+            error_embed = create_embed("Error", f"An unexpected error occurred: {e}", EmbedColors.ERROR)
+            await ctx.send(embed=error_embed)
+
+    @commands.command(name="edit")
+    @commands.dm_only()
+    async def edit_task(self, ctx: commands.Context, task_id: int, *, updates: str):
+        """
+        Edits one or more fields of an existing task.
+        Usage: !edit <task_id> field1:value1, field2:value2
+        """
+        try:
+            # Check if the task exists first
+            existing_task = self.db.fetch_tasks(criteria={'task_id': task_id})
+            if not existing_task:
+                embed = create_embed("Error", f"No task found with ID `{task_id}`.", EmbedColors.ERROR)
+                await ctx.send(embed=embed)
+                return
+
+            # Parse the updates string
+            update_dict = {}
+            valid_fields = ['description', 'priority', 'due_date', 'status', 'notes', 'estimated_time', 'actual_time', 'date_completed']
+            
+            try:
+                pairs = [pair.strip() for pair in updates.split(',')]
+                for pair in pairs:
+                    if ':' not in pair:
+                        raise ValueError(f"Invalid format for '{pair}'. Expected 'field:value'.")
+                    key, value = pair.split(':', 1)
+                    key = key.strip().lower()
+                    value = value.strip()
+                    
+                    if key not in valid_fields:
+                        await ctx.send(embed=create_embed("Error", f"Invalid field: `{key}`. You can only edit: {', '.join(valid_fields)}", EmbedColors.ERROR))
+                        return
+                    # Allow setting a field to empty
+                    if value.lower() in ['none', 'null', '']:
+                        update_dict[key] = None
+                    else:
+                        update_dict[key] = value
+            except ValueError as ve:
+                 await ctx.send(embed=create_embed("Error", f"Could not parse your updates. {ve}", EmbedColors.ERROR))
+                 return
+
+            if not update_dict:
+                await ctx.send(embed=create_embed("Error", "No valid updates were provided.", EmbedColors.ERROR))
+                return
+
+            # Update the task in the database
+            self.db.update_task(task_id, update_dict)
+            log.info(f"Task {task_id} updated with: {update_dict}")
+
+            # Send a confirmation message
+            updated_fields_str = "\n".join([f"**{key.capitalize()}:** {value}" for key, value in update_dict.items()])
+            embed = create_embed(
+                "✅ Task Updated",
+                f"Successfully updated Task ID `{task_id}` with the following changes:\n{updated_fields_str}",
+                EmbedColors.SUCCESS
+            )
+            await ctx.send(embed=embed)
+
+        except ValueError:
+            await ctx.send("Invalid Task ID. Please provide a number.")
+        except Exception as e:
+            log.error(f"Error in !edit command: {e}", exc_info=True)
+            error_embed = create_embed("Error", f"An unexpected error occurred: {e}", EmbedColors.ERROR)
+            await ctx.send(embed=error_embed)
+
 async def setup(bot: commands.Bot):
     await bot.add_cog(LLMCog(bot))

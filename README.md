@@ -137,6 +137,8 @@ You'll need to run `systemctl daemon-reload` followed by `systemctl enable jn-66
 | `!t <description>`  | Creates a new task. The LLM infers priority and due date.                 | `!t I really need to finish the project by tomorrow`  |
 | `!tasks`            | Displays your pending and overdue tasks as interactive buttons.           | `!tasks`                                              |
 | `!m <thought>`      | Stores a "musing" or thought in the database.                             | `!m I should learn how to make pasta from scratch.`   |
+| `!view <task_id>`   | Displays the complete details of a specific task                          | `!view 67`                                            |
+| `!edit <task_id> <updates>` | Edits one or more fields in a task                                | `!view 67 priority:LOW, status:pending`               |
 | **Calendar**        |                                                                           |                                                       |
 | `!today`            | Fetches and displays today's events from your configured Google Calendars.| `!today`                                              |
 | **LLM & Utility**   |                                                                           |                                                       |
