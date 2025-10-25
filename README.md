@@ -131,25 +131,26 @@ You'll need to run `systemctl daemon-reload` followed by `systemctl enable jn-66
 
 ## Command Reference
 
-| Command             | Description                                                               | Example                                               |
-| ------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------- |
-| **Task Management** |                                                                           |                                                       |
-| `!t <description>`  | Creates a new task. The LLM infers priority and due date.                 | `!t I really need to finish the project by tomorrow`  |
-| `!tasks`            | Displays your pending and overdue tasks as interactive buttons.           | `!tasks`                                              |
-| `!m <thought>`      | Stores a "musing" or thought in the database.                             | `!m I should learn how to make pasta from scratch.`   |
-| `!view <task_id>`   | Displays the complete details of a specific task                          | `!view 67`                                            |
-| `!edit <task_id> <updates>` | Edits one or more fields in a task                                | `!view 67 priority:LOW, status:pending`               |
-| **Calendar**        |                                                                           |                                                       |
-| `!today`            | Fetches and displays today's events from your configured Google Calendars.| `!today`                                              |
-| **LLM & Utility**   |                                                                           |                                                       |
-| `!history`          | Shows the current LLM conversation history.                               | `!history`                                            |
-| `!clearhistory`     | Asks for confirmation before clearing the LLM's memory.                   | `!clearhistory`                                       |
-| `!ping`             | Checks the bot's latency to Discord's servers.                            | `!ping`                                               |
-| **Admin Commands**  | *(Bot owner only)*                                                        |                                                       |
-| `!reload <cog>`     | Reloads a specified cog (e.g., `llm_cog`).                                | `!reload admin_cog`                                   |
-| `!load <cog>`       | Loads a cog.                                                              | `!load utils_cog`                                     |
-| `!unload <cog>`     | Unloads a cog.                                                            | `!unload calendar_cog`                                |
-
+| Command                       | Description                                                                    | Example                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| **Task Management**           |                                                                                |                                                          |
+| `!t <description>`            | Creates a new task. The LLM infers priority and due date.                      | `!t I really need to finish the project by tomorrow`     |
+| `!tasks`                      | Displays your pending and overdue tasks as interactive buttons.                | `!tasks`                                                 |
+| `!view <task_id>`             | Displays the complete details for a specific task.                             | `!view 42`                                               |
+| `!edit <task_id> <updates>`   | Edits one or more fields of a task.                                            | `!edit 42 priority:HIGH, status:pending`                 |
+| `!delete <task_id>`           | Deletes a task after confirmation.                                             | `!delete 42`                                             |
+| `!m <thought>`                | Stores a "musing" or thought in the database.                                  | `!m I should learn how to make pasta from scratch.`      |
+| **Calendar**                  |                                                                                |                                                          |
+| `!today`                      | Fetches and displays today's events from your configured Google Calendars.     | `!today`                                                 |
+| **LLM & Utility**             |                                                                                |                                                          |
+| `!history`                    | Shows the current LLM conversation history.                                    | `!history`                                               |
+| `!clearhistory`               | Asks for confirmation before clearing the LLM's memory.                        | `!clearhistory`                                          |
+| `!lastcode`                   | Displays the last Python code block generated by the tool.                     | `!lastcode`                                              |
+| `!ping`                       | Checks the bot's latency to Discord's servers.                                 | `!ping`                                                  |
+| **Admin Commands**            | *(Bot owner only)*                                                             |                                                          |
+| `!reload <cog>`               | Reloads a specified cog (e.g., `llm_cog`).                                     | `!reload admin_cog`                                      |
+| `!load <cog>`                 | Loads a cog.                                                                   | `!load utils_cog`                                        |
+| `!unload <cog>`               | Unloads a cog.                                                                 | `!unload calendar_cog`                                   |
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for details.
