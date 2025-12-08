@@ -184,3 +184,32 @@ class DatabaseManager:
 
         # Return the number of rows  changed
         return self.cursor.rowcount
+ 
+    def fetch_recent_musings(self, limit=10):
+        """Fetches the last 'limit' musings, ordered by most recent first."""
+        sql = "SELECT * FROM musings ORDER BY timestamp DESC LIMIT ?"
+        self.cursor.execute(sql, (limit,))
+        
+        # Convert rows to list of dicts
+        rows = self.cursor.fetchall()
+        if not rows:
+            return []
+            
+        field_names = [description[0] for description in self.cursor.description]
+        results = [dict(zip(field_names, row)) for row in rows]
+        return results
+
+    def search_musings_text(self, query_text):
+        """Searches musings for a specific text string."""
+        sql = "SELECT * FROM musings WHERE musing LIKE ? ORDER BY timestamp DESC"
+        # Add wildcards for partial matching
+        self.cursor.execute(sql, (f"%{query_text}%",))
+        
+        # Convert rows to list of dicts
+        rows = self.cursor.fetchall()
+        if not rows:
+            return []
+
+        field_names = [description[0] for description in self.cursor.description]
+        results = [dict(zip(field_names, row)) for row in rows]
+        return results

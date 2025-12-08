@@ -68,7 +68,7 @@ class LLMCog(commands.Cog):
             callback=self.scheduled_tasks_task,
             target_id=self.bot.authorized_user_id,
             target_type='dm',
-            target_time=time(10, 30, tzinfo=timezone.utc),
+            target_time=time(11, 30, tzinfo=timezone.utc),
             hours=24
         )
         self.bot.scheduler.add_job(task_job)
@@ -543,6 +543,85 @@ class LLMCog(commands.Cog):
         
         # Use the send_long_message helper in case the code is lengthy
         await send_long_message(ctx.channel, f"**Last Generated Code:**\n{formatted_code}")
+
+    @commands.command(name="musings", aliases=["recall"])
+    @commands.dm_only()
+    async def view_musings(self, ctx: commands.Context, limit: int = 5):
+        """
+        Recall the last 'x' musings.
+        Usage: !musings 5 (default is 5)
+        """
+        try:
+            # Cap the limit to prevent spamming
+            if limit > 20:
+                limit = 20
+                
+            results = self.db.fetch_recent_musings(limit)
+            
+            if not results:
+                await ctx.send(embed=create_embed("Musings", "You haven't mused about anything yet.", EmbedColors.INFO))
+                return
+
+            description_lines = []
+            for item in results:
+                # Format timestamp to be more readable (YYYY-MM-DD HH:MM)
+                dt = datetime.fromisoformat(item['timestamp'])
+                formatted_time = dt.strftime("%Y-%m-%d %H:%M")
+                
+                description_lines.append(f"**[{formatted_time}]**\n{item['musing']}\n")
+
+            embed = create_embed(
+                f"💭 Last {len(results)} Musings",
+                "\n".join(description_lines),
+                EmbedColors.INFO
+            )
+            await send_long_message(ctx.channel, embed.description) # Using helper if it gets too long, or just send embed
+            # Note: Embed descriptions have a 4096 char limit. 
+            # If your musings are long, simpler to just send the embed:
+            # await ctx.send(embed=embed)
+            
+        except Exception as e:
+            log.error(f"Error fetching musings: {e}", exc_info=True)
+            await ctx.send(embed=create_embed("Error", "Could not fetch musings.", EmbedColors.ERROR))
+
+    @commands.command(name="search")
+    @commands.dm_only()
+    async def search_musings(self, ctx: commands.Context, *, query: str):
+        """
+        Search your stored musings for a keyword.
+        Usage: !search pasta
+        """
+        try:
+            results = self.db.search_musings_text(query)
+            
+            if not results:
+                await ctx.send(embed=create_embed("Search Results", f"No musings found containing '{query}'.", EmbedColors.WARNING))
+                return
+
+            description_lines = []
+            # Limit search results to avoid massive messages
+            display_limit = 10
+            
+            for item in results[:display_limit]:
+                dt = datetime.fromisoformat(item['timestamp'])
+                formatted_time = dt.strftime("%Y-%m-%d")
+                description_lines.append(f"**[{formatted_time}]** {item['musing']}")
+
+            footer = f"Found {len(results)} results."
+            if len(results) > display_limit:
+                footer += f" Showing newest {display_limit}."
+
+            embed = create_embed(
+                f"🔎 Search: '{query}'",
+                "\n\n".join(description_lines),
+                EmbedColors.SUCCESS,
+                footer_text=footer
+            )
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            log.error(f"Error searching musings: {e}", exc_info=True)
+            await ctx.send(embed=create_embed("Error", "Could not perform search.", EmbedColors.ERROR))
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(LLMCog(bot))
