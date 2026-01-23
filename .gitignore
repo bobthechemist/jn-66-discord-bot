@@ -19,6 +19,7 @@ gcredentials.json
 
 # Log Files
 *.log
+*.log.[0-9]*
 
 # Configuration file that contains secrets
 bot_config.json
